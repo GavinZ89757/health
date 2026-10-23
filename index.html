@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#5b5fc7">
+<!-- "only light": stops Chrome / 小米浏览器 forced dark mode from inverting the chart colours -->
+<meta name="color-scheme" content="only light">
+<meta name="format-detection" content="telephone=no, date=no">
+<!-- No external requests at all: data never leaves the phone. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>康复记录</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root { --pri: #5b5fc7; --pri-dark: #3f43a3; --bg: #f4f5fb; --card: #fff; --text: #262626; --muted: #616161; --line: #e6e7f2; --border: #cfd1e6; --focus: #d9480f; --high: #c92a2a; --low: #1864ab; --band: rgba(91, 95, 199, .13); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: -apple-system, Roboto, "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); font-size: 16px; line-height: 1.5; padding-bottom: calc(72px + env(safe-area-inset-bottom)); -webkit-tap-highlight-color: transparent; }
+  .topbar { position: sticky; top: 0; z-index: 5; background: var(--pri); color: #fff; padding: calc(10px + env(safe-area-inset-top)) 16px 10px; display: flex; align-items: center; gap: 8px; }
+  .topbar h1 { margin: 0; font-size: 18px; font-weight: 600; flex: 1; }
+  .topbar button { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.7); color: #fff; min-height: 38px; padding: 6px 12px; font-size: 14px; }
+  .banner { background: #fff3cd; color: #5c4400; padding: 8px 16px; font-size: 14px; }
+  main { max-width: 640px; margin: 0 auto; padding: 12px; }
+  .card { background: var(--card); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  h3 { font-size: 15px; margin: 0 0 6px; }
+  .field { display: block; margin: 0 0 12px; min-width: 0; }
+  .field-label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+  input, select, textarea { width: 100%; font: inherit; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text); min-height: 44px; }
+  textarea { resize: vertical; }
+  input[type=file] { padding: 8px; font-size: 14px; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  .grid3 { display: grid; grid-template-columns: 1.3fr 1fr; gap: 0 10px; }
+  @media (max-width: 380px) { .grid3, .grid2:has(input[type=date]) { grid-template-columns: 1fr; } }
+  .hint { display: block; color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+  .err { color: var(--high); font-size: 14px; margin: 0 0 10px; }
+  button, .btn { font: inherit; border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: 10px; padding: 9px 14px; min-height: 44px; cursor: pointer; touch-action: manipulation; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+  button.primary { background: var(--pri); border-color: var(--pri); color: #fff; font-weight: 600; width: 100%; }
+  button.danger { color: var(--high); border-color: #f0b8b3; }
+  button.small { min-height: 36px; padding: 4px 10px; font-size: 14px; }
+  button:disabled { opacity: .45; cursor: default; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  /* lists */
+  .list { list-style: none; margin: 0; padding: 0; }
+  .item { border-left: 4px solid var(--pri); background: #f8f8ff; border-radius: 0 10px 10px 0; padding: 10px 12px; margin-bottom: 10px; }
+  .item-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .item-head b { font-size: 15px; }
+  .item-date { color: var(--muted); font-size: 13px; }
+  .item p { margin: 4px 0 0; font-size: 15px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .item .actions { margin-top: 8px; }
+  .thumb { display: block; max-width: 100%; max-height: 220px; margin-top: 8px; border-radius: 8px; border: 1px solid var(--line); }
+  .empty { text-align: center; color: var(--muted); padding: 18px 8px; font-size: 14px; }
+  .group-title { font-size: 15px; color: var(--pri-dark); margin: 14px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  .group-title:first-child { margin-top: 0; }
+  .mrow { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .mrow:last-child { border-bottom: 0; }
+  .mrow .v { font-weight: 600; min-width: 64px; }
+  .mrow .d { color: var(--muted); font-size: 14px; flex: 1; }
+  .tag { font-size: 12px; padding: 1px 6px; border-radius: 6px; background: #eef; color: var(--pri-dark); white-space: nowrap; }
+  .tag.high { background: #ffe3e3; color: var(--high); }
+  .tag.low { background: #e7f0ff; color: var(--low); }
+  /* charts */
+  .chart-card h3 { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .chart-card h3 small { color: var(--muted); font-weight: normal; font-size: 13px; }
+  svg.chart { width: 100%; height: auto; display: block; }
+  svg.chart text { font-size: 11px; fill: #555; font-family: inherit; }
+  svg.chart .grid { stroke: #e3e4ef; stroke-width: 1; }
+  svg.chart .axis { stroke: #b8bad3; stroke-width: 1; }
+  svg.chart .band { fill: var(--band); }
+  svg.chart .line { fill: none; stroke: var(--pri); stroke-width: 2.2; stroke-linejoin: round; }
+  svg.chart .dot { fill: #fff; stroke: var(--pri); stroke-width: 2; }
+  svg.chart .dot.high { stroke: var(--high); fill: var(--high); }
+  svg.chart .dot.low { stroke: var(--low); fill: var(--low); }
+  svg.chart text.vlabel { font-size: 10.5px; fill: #333; }
+  /* bottom tabs */
+  nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; background: #fff; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+  nav.tabs button { flex: 1; border: 0; border-radius: 0; background: none; min-height: 58px; flex-direction: column; font-size: 12px; padding: 4px 0; color: var(--muted); gap: 1px; }
+  nav.tabs button span { font-size: 20px; line-height: 1.1; }
+  nav.tabs button[aria-selected=true] { color: var(--pri-dark); font-weight: 600; box-shadow: inset 0 3px 0 var(--pri); }
+  [hidden] { display: none !important; }
+  .toast { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: rgba(30,30,30,.92); color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 14px; max-width: 90vw; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 10; }
+  .toast.show { opacity: 1; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  ol.steps { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }
+  @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+  /* print = "导出报告" (save as PDF from the print dialog) */
+  #printArea { display: none; }
+  @media print {
+    body { background: #fff; padding: 0; font-size: 12pt; }
+    .topbar, nav.tabs, main, .toast, .banner { display: none !important; }
+    #printArea { display: block; padding: 0 4mm; }
+    #printArea h1 { text-align: center; font-size: 18pt; margin: 0 0 2mm; }
+    #printArea h2 { font-size: 14pt; border-bottom: 1.5pt solid var(--pri); padding-bottom: 1mm; margin: 6mm 0 3mm; }
+    #printArea .chart-card, #printArea .item { break-inside: avoid; }
+    #printArea .chart-card { box-shadow: none; padding: 0; margin-bottom: 4mm; }
+    #printArea svg.chart { max-width: 150mm; }
+    #printArea .item { background: none; }
+    #printArea .actions, #printArea .thumb { display: none; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h1>康复记录</h1>
+  <button type="button" id="btnInstall" hidden>安装到桌面</button>
+  <button type="button" id="btnPrint">导出报告</button>
+</header>
+<div class="banner" id="demoBanner" hidden>演示模式：示例数据，不会保存。去掉网址里的 ?demo 即可正常使用。</div>
+<div class="banner" id="backupBanner" hidden></div>
+
+<main>
+  <!-- 1. 标志物 -->
+  <section id="tab-markers" role="tabpanel" aria-labelledby="t-markers">
+    <form class="card" id="markerForm" novalidate>
+      <h2>添加标志物数据</h2>
+      <div class="grid3">
+        <label class="field"><span class="field-label">名称</span><input id="mName" list="markerNames" maxlength="40" placeholder="如：CEA" autocomplete="off" required></label>
+        <label class="field"><span class="field-label">日期</span><input type="date" id="mDate" required></label>
+      </div>
+      <datalist id="markerNames"></datalist>
+      <label class="field"><span class="field-label">数值</span><input id="mValue" inputmode="decimal" placeholder="检查结果" autocomplete="off" required></label>
+      <div class="grid2">
+        <label class="field"><span class="field-label">参考下限（可选）</span><input id="mRefMin" inputmode="decimal" placeholder="如：0" autocomplete="off"></label>
+        <label class="field"><span class="field-label">参考上限（可选）</span><input id="mRefMax" inputmode="decimal" placeholder="如：5" autocomplete="off"></label>
+      </div>
+      <p class="err" id="mErr" role="alert" hidden></p>
+      <button class="primary" type="submit">添加记录</button>
+      <span class="hint">同一名称下的参考范围会自动沿用上一次填的值。</span>
+    </form>
+    <div id="charts"></div>
+    <div class="card"><h2>历史记录</h2><div id="markerHistory"></div></div>
+  </section>
+
+  <!-- 2. 影像报告 -->
+  <section id="tab-reports" role="tabpanel" aria-labelledby="t-reports" hidden>
+    <form class="card" id="reportForm" novalidate>
+      <h2>上传检查报告</h2>
+      <div class="grid2">
+        <label class="field"><span class="field-label">类型</span><select id="rType"></select></label>
+        <label class="field"><span class="field-label">日期</span><input type="date" id="rDate" required></label>
+      </div>
+      <label class="field"><span class="field-label">文件（PDF 或图片，可拍照）</span><input type="file" id="rFile" accept=".pdf,image/*" required></label>
+      <p class="err" id="rErr" role="alert" hidden></p>
+      <button class="primary" type="submit">保存报告</button>
+    </form>
+    <ul class="list card" id="reportList" aria-label="报告列表"></ul>
+  </section>
+
+  <!-- 3. 治疗 -->
+  <section id="tab-treatments" role="tabpanel" aria-labelledby="t-treatments" hidden>
+    <form class="card" id="treatForm" novalidate>
+      <h2>记录治疗</h2>
+      <div class="grid2">
+        <label class="field"><span class="field-label">日期</span><input type="date" id="tDate" required></label>
+        <label class="field"><span class="field-label">类型</span><select id="tType"></select></label>
+      </div>
+      <label class="field"><span class="field-label">方案/药物</span><input id="tPlan" maxlength="200" placeholder="如：顺铂+培美曲塞" autocomplete="off" required></label>
+      <label class="field"><span class="field-label">备注（可选）</span><textarea id="tNote" rows="2" maxlength="2000" placeholder="反应、剂量等"></textarea></label>
+      <label class="field"><span class="field-label">附件（可选）</span><input type="file" id="tFile" accept=".pdf,image/*"></label>
+      <p class="err" id="tErr" role="alert" hidden></p>
+      <button class="primary" type="submit">保存记录</button>
+    </form>
+    <ul class="list card" id="treatList" aria-label="治疗记录列表"></ul>
+  </section>
+
+  <!-- 4. 医嘱笔记 -->
+  <section id="tab-notes" role="tabpanel" aria-labelledby="t-notes" hidden>
+    <form class="card" id="noteForm" novalidate>
+      <h2>记录医嘱/笔记</h2>
+      <div class="grid2">
+        <label class="field"><span class="field-label">日期</span><input type="date" id="nDate" required></label>
+        <label class="field"><span class="field-label">医生/标题（可选）</span><input id="nDoctor" maxlength="60" placeholder="如：张主任门诊" autocomplete="off"></label>
+      </div>
+      <label class="field"><span class="field-label">内容</span><textarea id="nContent" rows="4" maxlength="5000" placeholder="医嘱、注意事项、复查时间…" required></textarea></label>
+      <p class="err" id="nErr" role="alert" hidden></p>
+      <button class="primary" type="submit">保存笔记</button>
+    </form>
+    <ul class="list card" id="noteList" aria-label="笔记列表"></ul>
+  </section>
+
+  <!-- 5. 备份 -->
+  <section id="tab-backup" role="tabpanel" aria-labelledby="t-backup" hidden>
+    <div class="card">
+      <h2>备份与恢复</h2>
+      <p class="hint" style="margin-top:0">所有记录只保存在这台手机的浏览器里，不会上传到任何服务器。清除浏览器数据、卸载 Chrome 或换手机都会丢失记录，请定期备份。</p>
+      <p id="backupInfo"></p>
+      <div class="actions">
+        <button type="button" class="primary" id="btnBackup">导出备份文件</button>
+      </div>
+      <span class="hint">备份文件包含全部记录和上传的报告，可以通过微信/邮件发给自己或家人保存。</span>
+    </div>
+    <div class="card">
+      <h2>从备份恢复</h2>
+      <label class="field"><span class="field-label">选择备份文件（.json）或旧版“共享副本”（.html）</span><input type="file" id="importFile" accept=".json,.html,.htm,application/json,text/html"></label>
+      <span class="hint">恢复是“合并”：只添加本机没有的记录，不会覆盖或删除现有记录。</span>
+    </div>
+    <div class="card">
+      <h2>关于本机存储</h2>
+      <p id="storageInfo" class="hint" style="margin-top:0"></p>
+    </div>
+    <div class="card" id="installCard">
+      <h2>安装到桌面（小米 / 安卓）</h2>
+      <ol class="steps">
+        <li>用 Chrome 打开本页网址（必须是 https 网址，不能是手机里的文件）。</li>
+        <li>点右上角 ⋮ → “添加到主屏幕” → “安装”。</li>
+        <li>小米 HyperOS 如果桌面没出现图标：设置 → 应用设置 → 应用管理 → Chrome → 权限 → 打开“桌面快捷方式”，再装一次。</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>清空数据</h2>
+      <button type="button" class="danger" id="btnWipe">删除本机全部记录</button>
+      <span class="hint">会要求两次确认。建议先导出备份。</span>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" role="tablist" aria-label="功能">
+  <button type="button" role="tab" id="t-markers" data-tab="markers" aria-controls="tab-markers" aria-selected="true"><span aria-hidden="true">📈</span>标志物</button>
+  <button type="button" role="tab" id="t-reports" data-tab="reports" aria-controls="tab-reports" aria-selected="false"><span aria-hidden="true">📁</span>报告</button>
+  <button type="button" role="tab" id="t-treatments" data-tab="treatments" aria-controls="tab-treatments" aria-selected="false"><span aria-hidden="true">💊</span>治疗</button>
+  <button type="button" role="tab" id="t-notes" data-tab="notes" aria-controls="tab-notes" aria-selected="false"><span aria-hidden="true">📝</span>医嘱</button>
+  <button type="button" role="tab" id="t-backup" data-tab="backup" aria-controls="tab-backup" aria-selected="false"><span aria-hidden="true">💾</span>备份</button>
+</nav>
+
+<div id="printArea" aria-hidden="true"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
