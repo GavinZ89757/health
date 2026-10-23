@@ -150,6 +150,21 @@
       notes: data.notes || [],
     };
   }
+  /**
+   * Text-only backup for browsers that cannot download files (小米浏览器): small enough to paste into
+   * 微信“文件传输助手” or 便签. Report files and treatment attachments are left out.
+   */
+  function buildTextBackup(data, now) {
+    const b = buildBackup({
+      markers: data.markers,
+      notes: data.notes,
+      reports: [],
+      treatments: (data.treatments || []).map((t) => ({ id: t.id, date: t.date, type: t.type, plan: t.plan, note: t.note, file: null })),
+    }, now);
+    b.textOnly = true;
+    b.omittedFiles = (data.reports || []).length + (data.treatments || []).filter((t) => t.file).length;
+    return b;
+  }
   /** Old single-file app: "共享副本" HTML with `window.__SHARED_DATA__ = {...};</script>` injected (possibly several times). */
   function extractSharedData(html) {
     const marker = 'window.__SHARED_DATA__ = ';
@@ -167,12 +182,16 @@
     }
     return found; // the last injected copy is the newest one
   }
-  /** Parse a backup (.json) or an old 共享副本 (.html). Throws Error with a Chinese message when unrecognised. */
+  /** Parse a backup (.json or pasted text) or an old 共享副本 (.html). Throws Error with a Chinese message when unrecognised. */
   function parseImport(text) {
-    const t = String(text || '').replace(/^\uFEFF/, '').trim();
+    let t = String(text || '').replace(/^\uFEFF/, '').trim();
+    // Pasted from 微信/便签: tolerate extra text around the backup.
+    if (!t.startsWith('{') && !t.includes('__SHARED_DATA__') && t.includes(`"app":"${BACKUP_APP}"`)) {
+      t = t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1);
+    }
     let raw, source;
     if (t.startsWith('{')) {
-      try { raw = JSON.parse(t); } catch (_) { throw new Error('备份文件已损坏，无法读取。'); }
+      try { raw = JSON.parse(t); } catch (_) { throw new Error('备份内容不完整或已损坏，无法读取。如果是从微信复制的，请确认复制了全部内容。'); }
       if (!raw || raw.app !== BACKUP_APP) throw new Error('这不是“康复记录”的备份文件。');
       source = 'backup';
     } else if (t.includes('__SHARED_DATA__')) {
@@ -180,7 +199,7 @@
       if (!raw) throw new Error('共享副本里的数据无法读取。');
       source = 'shared-html';
     } else {
-      throw new Error('文件格式不对：请选择“康复记录备份_….json”，或旧版导出的“康复记录_共享副本_….html”。');
+      throw new Error('内容格式不对：请选择或粘贴“康复记录”的备份内容，或旧版导出的“康复记录_共享副本_….html”。');
     }
     return Object.assign(sanitizeAll(raw), { source });
   }
@@ -283,6 +302,31 @@
     return ref.max !== null ? `≤ ${fmt(ref.max)}` : `≥ ${fmt(ref.min)}`;
   }
 
+  /** Character-level line wrapping (works for Chinese, which has no spaces). measure(str) → width. */
+  function wrapLines(text, maxWidth, measure) {
+    const out = [];
+    for (const para of String(text == null ? '' : text).split('\n')) {
+      let line = '';
+      for (const ch of Array.from(para)) {
+        if (line && measure(line + ch) > maxWidth) { out.push(line); line = ch; }
+        else line += ch;
+      }
+      out.push(line);
+    }
+    return out;
+  }
+  /** Split blocks (each with a height) into pages no taller than maxHeight. A block taller than a page gets its own page. */
+  function paginate(heights, maxHeight) {
+    const pages = [];
+    let cur = [], h = 0;
+    heights.forEach((bh, i) => {
+      if (cur.length && h + bh > maxHeight) { pages.push(cur); cur = []; h = 0; }
+      cur.push(i); h += bh;
+    });
+    if (cur.length) pages.push(cur);
+    return pages;
+  }
+
   function makeDemoData(today) {
     const t = dayNum(today);
     const d = (n) => fromDayNum(t - n);
@@ -307,7 +351,7 @@
     REPORT_TYPES, TREATMENT_TYPES, COMMON_MARKERS, LIMITS,
     todayISO, dayNum, fromDayNum, isValidDate, parseNumber, newId,
     sanitizeMarker, sanitizeNote, sanitizeTreatment, sanitizeReport, sanitizeAll,
-    dataUrlToBytes, buildBackup, extractSharedData, parseImport, splitNew,
-    groupMarkers, refStatus, chartGeometry, fmt, refText, makeDemoData,
+    dataUrlToBytes, buildBackup, buildTextBackup, extractSharedData, parseImport, splitNew,
+    groupMarkers, refStatus, chartGeometry, fmt, refText, wrapLines, paginate, makeDemoData,
   };
 });

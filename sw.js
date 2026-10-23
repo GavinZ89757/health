@@ -2,7 +2,7 @@
 // Cache names are per ORIGIN, and every repo under username.github.io shares one origin,
 // so this worker only ever touches caches that start with its own PREFIX.
 const PREFIX = 'kangfu-';
-const CACHE = PREFIX + 'v1';
+const CACHE = PREFIX + 'v2';
 const ASSETS = ['./', './index.html', './core.js', './app.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', (e) => {

@@ -137,18 +137,58 @@
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     return 'downloaded';
   }
-  /** Open / save an attachment. Android hands PDFs to the system viewer via the share sheet. */
+  /** Open / save an attachment. Images go to the long-press viewer; other files (PDF) are handed to the browser. */
   async function openFile(f) {
     const blob = fileBlob(f);
     if (!blob) return toast('文件无法读取');
+    if (/^image\//.test(blob.type) || /\.(jpe?g|png|gif|webp|bmp|heic)$/i.test(f.fileName)) {
+      try {
+        const url = await blobToDataUrl(blob);
+        return openViewer([url], [['长按图片 → 选“保存图片”', true], ['，就会存进手机相册。']], f.fileName);
+      } catch (_) { return toast('图片无法打开'); }
+    }
     const how = await shareOrDownload(blob, f.fileName, blob.type || 'application/octet-stream');
-    if (how === 'downloaded') toast('已保存到“下载”文件夹');
+    if (how === 'downloaded') toast('已交给浏览器下载。如果“文件管理 → 下载”里找不到，说明这个浏览器打不开网页里的 PDF，请查看原文件。');
   }
   function fileActions(f) {
     const box = el('div', 'actions');
-    box.append(btn('打开 / 保存文件', 'small', () => openFile(f), `打开或保存 ${f.fileName}`));
+    const isImg = /\.(jpe?g|png|gif|webp|bmp|heic)$/i.test(f.fileName) || /^image\//.test(f.mime || (f.blob && f.blob.type) || '');
+    box.append(btn(isImg ? '查看 / 保存到相册' : '打开文件', 'small', () => openFile(f), `打开 ${f.fileName}`));
     return box;
   }
+
+  // ---------- image viewer (long-press to save) ----------
+  // Visibility is driven by the [hidden] attribute; index.html has "[hidden] { display: none !important }"
+  // so the .viewer display:flex rule can never keep it on screen.
+  let viewerReturn = null;
+  /** tip: list of [text, bold?] segments, rendered with textContent only. */
+  function openViewer(urls, tip, alt) {
+    viewerReturn = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+    const tipEl = $('viewerTip');
+    tipEl.textContent = '';
+    for (const [text, bold] of tip) tipEl.append(bold ? el('b', null, text) : document.createTextNode(text));
+    const box = $('viewerImgs');
+    box.textContent = '';
+    urls.forEach((u, i) => {
+      const img = el('img');
+      img.src = u;
+      img.alt = (alt || '图片') + (urls.length > 1 ? ` 第 ${i + 1} 张` : '');
+      box.append(img);
+    });
+    box.scrollTop = 0;
+    $('viewer').hidden = false;
+    document.body.style.overflow = 'hidden';
+    $('viewerClose').focus();
+  }
+  function closeViewer() {
+    $('viewer').hidden = true;
+    $('viewerImgs').textContent = '';
+    document.body.style.overflow = '';
+    if (viewerReturn && viewerReturn.isConnected && viewerReturn.focus) viewerReturn.focus();
+    viewerReturn = null;
+  }
+  $('viewerClose').addEventListener('click', closeViewer);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('viewer').hidden) closeViewer(); });
   function thumbFor(f) {
     const blob = fileBlob(f);
     if (!blob || !/^image\//.test(blob.type)) return null;
@@ -309,7 +349,7 @@
   }
   async function renderStorage() {
     const box = $('storageInfo');
-    let txt = DEMO ? '演示模式不保存任何数据。' : idb ? '' : '⚠ 本浏览器无法使用本地数据库，记录不会被保存。请用 Chrome 打开 https 网址。';
+    let txt = DEMO ? '演示模式不保存任何数据。' : idb ? '' : '⚠ 本浏览器无法使用本地数据库，记录不会被保存。请用手机浏览器打开 https 网址。';
     if (!DEMO && idb && navigator.storage) {
       try {
         const persisted = navigator.storage.persisted ? await navigator.storage.persisted() : false;
@@ -443,16 +483,77 @@
       const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
       const how = await shareOrDownload(blob, `康复记录备份_${today()}.json`, 'application/json');
       if (how === 'cancelled') return;
-      meta.lastBackup = new Date().toISOString().slice(0, 10);
-      await write('meta', (os) => os.put({ key: 'lastBackup', value: meta.lastBackup }));
-      renderBackup();
-      toast(how === 'downloaded' ? `备份已保存到“下载”文件夹（${fmtSize(blob.size)}）` : '备份已分享');
+      if (how === 'shared') {
+        await markBackedUp();
+        toast('备份已分享');
+      } else {
+        // A download cannot be confirmed (小米浏览器 often drops it silently), so it does not count as a backup.
+        alert(`已交给浏览器下载（${fmtSize(blob.size)}）。\n请到“文件管理 → 下载”确认有“康复记录备份_${today()}.json”。\n找不到就说明这个浏览器不支持下载，请改用“复制备份内容”。`);
+      }
     } catch (err) {
       alert('备份失败：' + ((err && err.message) || err));
     } finally {
       b.disabled = false;
-      b.textContent = '导出备份文件';
+      b.textContent = '导出完整备份文件';
     }
+  });
+
+  async function markBackedUp() {
+    meta.lastBackup = new Date().toISOString().slice(0, 10);
+    await write('meta', (os) => os.put({ key: 'lastBackup', value: meta.lastBackup }));
+    renderBackup();
+  }
+
+  // ---------- text backup (copy / paste) ----------
+  function copyWithExecCommand(text) {
+    const ta = el('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    document.body.append(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+  $('btnCopyBackup').addEventListener('click', async () => {
+    if (!totalCount()) return toast('还没有记录可以备份');
+    const backup = KF.buildTextBackup(data);
+    const text = JSON.stringify(backup);
+    $('copyFallback').hidden = true;
+    let ok = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); ok = true; }
+    } catch (_) { ok = false; }
+    if (!ok) ok = copyWithExecCommand(text);
+    if (ok) {
+      await markBackedUp();
+      alert(`已复制备份内容（${text.length} 个字符）。\n现在打开微信“文件传输助手”或“便签”，长按输入框 → 粘贴 → 发送/保存。` +
+        (backup.omittedFiles ? `\n\n注意：${backup.omittedFiles} 个报告/附件文件不在文字备份里，请保留原件。` : ''));
+    } else {
+      $('backupText').value = text;
+      $('copyFallback').hidden = false;
+      $('backupText').focus();
+      $('backupText').select();
+    }
+  });
+  $('btnCopied').addEventListener('click', async () => {
+    await markBackedUp();
+    $('copyFallback').hidden = true;
+    $('backupText').value = '';
+    toast('好的，记得把内容粘贴到微信或便签里保存');
+  });
+  $('btnRestoreText').addEventListener('click', async () => {
+    const text = $('restoreText').value;
+    if (!text.trim()) return showErr('restoreErr', '请先粘贴备份内容');
+    let parsed;
+    try { parsed = KF.parseImport(text); }
+    catch (err) { return showErr('restoreErr', err.message); }
+    showErr('restoreErr', '');
+    if (await importParsed(parsed)) $('restoreText').value = '';
   });
 
   /** Imported files arrive as data URLs; store them as Blobs like newly uploaded ones. */
@@ -470,16 +571,21 @@
     let parsed;
     try { parsed = KF.parseImport(await file.text()); }
     catch (err) { return alert(err.message); }
+    await importParsed(parsed);
+  });
+
+  /** Merge parsed backup into this device. Returns true when something was added. */
+  async function importParsed(parsed) {
     const plan = {};
     let fresh = 0, dup = 0;
     for (const s of STORES) {
       const r = KF.splitNew(data[s], parsed[s]);
       plan[s] = r.fresh; fresh += r.fresh.length; dup += r.dup;
     }
-    if (!fresh) return alert(`没有需要恢复的新记录${dup ? `（${dup} 条本机已经有了）` : ''}。`);
+    if (!fresh) { alert(`没有需要恢复的新记录${dup ? `（${dup} 条本机已经有了）` : ''}。`); return false; }
     const summary = `将添加：标志物 ${plan.markers.length} 条、报告 ${plan.reports.length} 份、治疗 ${plan.treatments.length} 条、笔记 ${plan.notes.length} 条。` +
       (dup ? `\n另有 ${dup} 条本机已有，会跳过。` : '') + (parsed.skipped ? `\n有 ${parsed.skipped} 条数据不完整，会跳过。` : '') + '\n\n现有记录不会被覆盖。继续吗？';
-    if (!confirm(summary)) return;
+    if (!confirm(summary)) return false;
     try {
       for (const s of STORES) {
         for (const item of plan[s]) {
@@ -496,11 +602,13 @@
       }
       renderAll();
       toast(`已恢复 ${fresh} 条记录`);
+      return true;
     } catch (err) {
       renderAll();
-      alert(friendlyError(err) + '\n已恢复的部分会保留，可以再次选择同一文件继续（不会重复添加）。');
+      alert(friendlyError(err) + '\n已恢复的部分会保留，可以再恢复一次继续（不会重复添加）。');
+      return false;
     }
-  });
+  }
 
   $('btnWipe').addEventListener('click', async () => {
     if (!totalCount()) return toast('本机没有记录');
@@ -513,35 +621,132 @@
     } catch (err) { alert(friendlyError(err)); }
   });
 
-  // ---------- print report (save as PDF) ----------
-  function buildPrintArea() {
-    const p = $('printArea');
-    p.textContent = '';
-    p.append(el('h1', null, '康复记录报告'), el('p', 'hint', `生成日期：${md(today())}`));
+  // ---------- report image (drawn on a canvas; long-press to save to the gallery) ----------
+  // 小米浏览器 cannot print to PDF, so the report is a long picture (split into several if very long).
+  const REPORT_W = 720, REPORT_SCALE = 2, PAGE_MAX = 4800, PAD = 28;
+  const FONT = '-apple-system, Roboto, "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif';
+  const CHART_CSS = 'text{font-size:11px;fill:#555;font-family:sans-serif}.grid{stroke:#e3e4ef;stroke-width:1}.axis{stroke:#b8bad3;stroke-width:1}' +
+    '.band{fill:rgba(91,95,199,.13)}.line{fill:none;stroke:#5b5fc7;stroke-width:2.2;stroke-linejoin:round}.dot{fill:#fff;stroke:#5b5fc7;stroke-width:2}' +
+    '.dot.high{stroke:#c92a2a;fill:#c92a2a}.dot.low{stroke:#1864ab;fill:#1864ab}text.vlabel{font-size:10.5px;fill:#333}';
+  function svgToImage(svg, w, h) {
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', SVG);
+    clone.setAttribute('width', w);
+    clone.setAttribute('height', h);
+    const style = document.createElementNS(SVG, 'style');
+    style.textContent = CHART_CSS;
+    clone.insertBefore(style, clone.firstChild);
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(clone));
+    return img.decode().then(() => img);
+  }
+  async function buildReportBlocks() {
+    const mctx = document.createElement('canvas').getContext('2d');
+    const inner = REPORT_W - PAD * 2;
+    const blocks = [];
+    const text = (str, size, opts = {}) => {
+      const font = `${opts.bold ? '600 ' : ''}${size}px ${FONT}`;
+      mctx.font = font;
+      const indent = opts.indent || 0;
+      const lines = KF.wrapLines(str, inner - indent - (opts.right || 0), (s) => mctx.measureText(s).width);
+      const lh = Math.round(size * 1.5);
+      return { lines, font, lh, indent, color: opts.color || '#262626', align: opts.align, h: lines.length * lh };
+    };
+    const drawText = (ctx, t, x, y) => {
+      ctx.font = t.font;
+      ctx.fillStyle = t.color;
+      ctx.textAlign = t.align === 'center' ? 'center' : 'left';
+      t.lines.forEach((l, i) => ctx.fillText(l, t.align === 'center' ? REPORT_W / 2 : x + t.indent, y + t.lh * i + t.lh * 0.78));
+      ctx.textAlign = 'left';
+    };
+    const textBlock = (str, size, opts = {}) => {
+      const t = text(str, size, opts);
+      const gap = opts.gap == null ? 6 : opts.gap;
+      blocks.push({ h: t.h + gap, draw: (ctx, y) => drawText(ctx, t, PAD, y) });
+    };
+    const heading = (str) => {
+      const t = text(str, 20, { bold: true, color: '#3f43a3' });
+      blocks.push({ h: 18 + t.h + 12, draw: (ctx, y) => {
+        drawText(ctx, t, PAD, y + 18);
+        ctx.fillStyle = '#5b5fc7';
+        ctx.fillRect(PAD, y + 18 + t.h + 4, inner, 2);
+      } });
+    };
+    const item = (head, body) => {
+      const a = text(head, 15, { bold: true, indent: 14 });
+      const b = body ? text(body, 15, { indent: 14 }) : null;
+      const h = 10 + a.h + (b ? 2 + b.h : 0) + 10;
+      blocks.push({ h: h + 8, draw: (ctx, y) => {
+        ctx.fillStyle = '#f4f4fc'; ctx.fillRect(PAD, y, inner, h);
+        ctx.fillStyle = '#5b5fc7'; ctx.fillRect(PAD, y, 4, h);
+        drawText(ctx, a, PAD, y + 10);
+        if (b) drawText(ctx, b, PAD, y + 12 + a.h);
+      } });
+    };
+
+    textBlock('康复记录报告', 26, { bold: true, align: 'center', gap: 2 });
+    textBlock(`生成日期：${md(today())}`, 14, { align: 'center', color: '#616161', gap: 4 });
     const groups = KF.groupMarkers(data.markers);
     if (groups.length) {
-      p.append(el('h2', null, '肿瘤标志物趋势'));
+      heading('肿瘤标志物趋势');
       for (const g of groups) {
-        p.append(chartCard(g));
-        const line = g.points.map((m) => `${m.date}：${KF.fmt(m.value)}`).join('；');
-        p.append(el('p', 'hint', line));
+        textBlock(g.name + (g.ref ? `　参考范围 ${KF.refText(g.ref)}` : ''), 16, { bold: true, gap: 2 });
+        const w = inner, h = Math.round((inner * 190) / 340);
+        const img = await svgToImage(drawChart(g), w, h);
+        blocks.push({ h: h + 4, draw: (ctx, y) => ctx.drawImage(img, PAD, y, w, h) });
+        textBlock(g.points.map((m) => `${m.date}：${KF.fmt(m.value)}`).join('；'), 13, { color: '#616161', gap: 12 });
       }
     }
     const section = (title, list, fn) => {
-      p.append(el('h2', null, title));
-      if (!list.length) { p.append(el('p', null, '无')); return; }
-      for (const x of list.slice().sort(byDateDesc)) p.append(fn(x));
+      heading(title);
+      if (!list.length) { textBlock('无', 15); return; }
+      for (const x of list.slice().sort(byDateDesc)) fn(x);
     };
-    const item = (head, body) => { const d = el('div', 'item'); d.append(el('b', null, head)); if (body) d.append(el('p', null, body)); return d; };
-    section('治疗记录', data.treatments, (t) => item(`${t.date}  ${t.type} · ${t.plan}`, t.note));
-    section('医嘱与笔记', data.notes, (n) => item(`${n.date}  ${n.doctor || '笔记'}`, n.content));
-    section('检查报告', data.reports, (r) => item(`${r.date}  ${r.type}`, r.fileName));
+    section('治疗记录', data.treatments, (t) => item(`${t.date}　${t.type} · ${t.plan}`, t.note));
+    section('医嘱与笔记', data.notes, (n) => item(`${n.date}　${n.doctor || '笔记'}`, n.content));
+    section('检查报告', data.reports, (r) => item(`${r.date}　${r.type}`, r.fileName));
+    return blocks;
   }
-  $('btnPrint').addEventListener('click', () => {
+  async function renderReportImages() {
+    const blocks = await buildReportBlocks();
+    const pages = KF.paginate(blocks.map((b) => b.h), PAGE_MAX - PAD * 2 - 40);
+    return pages.map((idx, p) => {
+      const head = p > 0 ? 34 : 0;
+      const h = PAD * 2 + head + idx.reduce((s, i) => s + blocks[i].h, 0);
+      const canvas = document.createElement('canvas');
+      canvas.width = REPORT_W * REPORT_SCALE;
+      canvas.height = Math.ceil(h * REPORT_SCALE);
+      const ctx = canvas.getContext('2d');
+      ctx.scale(REPORT_SCALE, REPORT_SCALE);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, REPORT_W, h);
+      ctx.textBaseline = 'alphabetic';
+      if (head) {
+        ctx.font = `13px ${FONT}`;
+        ctx.fillStyle = '#616161';
+        ctx.fillText(`康复记录报告（第 ${p + 1} / ${pages.length} 张）`, PAD, PAD + 14);
+      }
+      let y = PAD + head;
+      for (const i of idx) { blocks[i].draw(ctx, y); y += blocks[i].h; }
+      return canvas.toDataURL('image/png');
+    });
+  }
+  $('btnPrint').addEventListener('click', async (e) => {
     if (!totalCount()) return toast('还没有记录');
-    buildPrintArea();
-    toast('在打印页面选择“另存为 PDF”');
-    setTimeout(() => window.print(), 300);
+    const b = e.currentTarget;
+    b.disabled = true;
+    b.textContent = '生成中…';
+    try {
+      const urls = await renderReportImages();
+      const tip = [['长按图片 → 选“保存图片”', true], ['，就会存进手机相册，可以直接给医生看或发微信。']];
+      if (urls.length > 1) tip.push([`\n内容较多，共 ${urls.length} 张，请往下滑逐张保存。`]);
+      openViewer(urls, tip, '康复记录报告');
+    } catch (err) {
+      alert('报告图片生成失败：' + ((err && err.message) || err));
+    } finally {
+      b.disabled = false;
+      b.textContent = '报告图片';
+    }
   });
 
   // ---------- tabs ----------

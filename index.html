@@ -86,27 +86,23 @@
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   ol.steps { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }
   @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
-  /* print = "导出报告" (save as PDF from the print dialog) */
-  #printArea { display: none; }
-  @media print {
-    body { background: #fff; padding: 0; font-size: 12pt; }
-    .topbar, nav.tabs, main, .toast, .banner { display: none !important; }
-    #printArea { display: block; padding: 0 4mm; }
-    #printArea h1 { text-align: center; font-size: 18pt; margin: 0 0 2mm; }
-    #printArea h2 { font-size: 14pt; border-bottom: 1.5pt solid var(--pri); padding-bottom: 1mm; margin: 6mm 0 3mm; }
-    #printArea .chart-card, #printArea .item { break-inside: avoid; }
-    #printArea .chart-card { box-shadow: none; padding: 0; margin-bottom: 4mm; }
-    #printArea svg.chart { max-width: 150mm; }
-    #printArea .item { background: none; }
-    #printArea .actions, #printArea .thumb { display: none; }
-  }
+  /* image viewer: long-press "保存图片" saves to the gallery (小米浏览器 cannot save downloads reliably) */
+  .viewer { position: fixed; inset: 0; z-index: 20; background: #1b1b1b; color: #fff; display: flex; flex-direction: column; padding: calc(10px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); }
+  .viewer-tip { margin: 0 0 8px; font-size: 14px; line-height: 1.5; color: #f2f2f2; white-space: pre-line; }
+  .viewer-tip b { color: #ffd166; }
+  .viewer-imgs { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; background: #fff; border-radius: 8px; }
+  .viewer-imgs img { display: block; width: 100%; height: auto; -webkit-touch-callout: default; -webkit-user-select: auto; user-select: auto; }
+  .viewer-imgs img + img { border-top: 6px solid #1b1b1b; }
+  .viewer .actions { margin-top: 10px; }
+  .viewer .actions button { flex: 1; }
+  textarea.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
 </style>
 </head>
 <body>
 <header class="topbar">
   <h1>康复记录</h1>
   <button type="button" id="btnInstall" hidden>安装到桌面</button>
-  <button type="button" id="btnPrint">导出报告</button>
+  <button type="button" id="btnPrint">报告图片</button>
 </header>
 <div class="banner" id="demoBanner" hidden>演示模式：示例数据，不会保存。去掉网址里的 ?demo 即可正常使用。</div>
 <div class="banner" id="backupBanner" hidden></div>
@@ -184,29 +180,41 @@
   <!-- 5. 备份 -->
   <section id="tab-backup" role="tabpanel" aria-labelledby="t-backup" hidden>
     <div class="card">
-      <h2>备份与恢复</h2>
-      <p class="hint" style="margin-top:0">所有记录只保存在这台手机的浏览器里，不会上传到任何服务器。清除浏览器数据、卸载 Chrome 或换手机都会丢失记录，请定期备份。</p>
+      <h2>备份（推荐：复制文字备份）</h2>
+      <p class="hint" style="margin-top:0">所有记录只保存在这台手机的这个浏览器里，不会上传到任何服务器。清除浏览器数据、换浏览器或换手机都会丢失记录，请定期备份。</p>
       <p id="backupInfo"></p>
-      <div class="actions">
-        <button type="button" class="primary" id="btnBackup">导出备份文件</button>
+      <button type="button" class="primary" id="btnCopyBackup">复制备份内容</button>
+      <span class="hint">复制后粘贴到微信“文件传输助手”或手机“便签”里发送/保存，就算备份好了。包含标志物、治疗、医嘱全部文字记录；<b>报告照片和附件不包含</b>，请保留原件（相册照片、医院给的文件）。</span>
+      <div id="copyFallback" hidden>
+        <p class="err" style="margin:10px 0 6px">浏览器不允许自动复制。请长按下面的框 → “全选” → “复制”，复制好后点“我已复制”。</p>
+        <textarea id="backupText" class="mono" rows="6" readonly aria-label="备份内容"></textarea>
+        <button type="button" id="btnCopied" style="margin-top:6px">我已复制</button>
       </div>
-      <span class="hint">备份文件包含全部记录和上传的报告，可以通过微信/邮件发给自己或家人保存。</span>
     </div>
     <div class="card">
-      <h2>从备份恢复</h2>
-      <label class="field"><span class="field-label">选择备份文件（.json）或旧版“共享副本”（.html）</span><input type="file" id="importFile" accept=".json,.html,.htm,application/json,text/html"></label>
+      <h2>从复制的内容恢复</h2>
+      <label class="field"><span class="field-label">把之前保存的备份内容粘贴到这里</span><textarea id="restoreText" class="mono" rows="4" placeholder="长按 → 粘贴"></textarea></label>
+      <p class="err" id="restoreErr" role="alert" hidden></p>
+      <button type="button" class="primary" id="btnRestoreText">恢复</button>
       <span class="hint">恢复是“合并”：只添加本机没有的记录，不会覆盖或删除现有记录。</span>
+    </div>
+    <div class="card">
+      <h2>完整备份文件（含报告）</h2>
+      <p class="hint" style="margin-top:0">把全部记录和报告文件打包成一个文件。<b>小米浏览器可能存不下来</b>：点完后请到“文件管理 → 下载”里确认有“康复记录备份_日期.json”。找不到就说明不支持，请用上面的复制备份。</p>
+      <button type="button" id="btnBackup">导出完整备份文件</button>
+      <label class="field" style="margin-top:12px"><span class="field-label">从备份文件恢复（.json，或旧版“共享副本” .html）</span><input type="file" id="importFile" accept=".json,.html,.htm,application/json,text/html"></label>
     </div>
     <div class="card">
       <h2>关于本机存储</h2>
       <p id="storageInfo" class="hint" style="margin-top:0"></p>
     </div>
     <div class="card" id="installCard">
-      <h2>安装到桌面（小米 / 安卓）</h2>
+      <h2>添加到桌面（小米浏览器）</h2>
       <ol class="steps">
-        <li>用 Chrome 打开本页网址（必须是 https 网址，不能是手机里的文件）。</li>
-        <li>点右上角 ⋮ → “添加到主屏幕” → “安装”。</li>
-        <li>小米 HyperOS 如果桌面没出现图标：设置 → 应用设置 → 应用管理 → Chrome → 权限 → 打开“桌面快捷方式”，再装一次。</li>
+        <li>用小米浏览器打开本页网址（必须是 https 网址，不能是手机里的文件）。</li>
+        <li>点底部菜单（☰ 或“三条横线”）→ “添加到桌面”或“添加至 → 桌面”。</li>
+        <li>桌面没出现图标：设置 → 应用设置 → 应用管理 → 浏览器 → 权限 → 打开“桌面快捷方式”，再添加一次。</li>
+        <li>以后都从这个图标或同一个浏览器打开。<b>换浏览器打开，看不到这里的记录。</b></li>
       </ol>
     </div>
     <div class="card">
@@ -225,8 +233,14 @@
   <button type="button" role="tab" id="t-backup" data-tab="backup" aria-controls="tab-backup" aria-selected="false"><span aria-hidden="true">💾</span>备份</button>
 </nav>
 
-<div id="printArea" aria-hidden="true"></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-labelledby="viewerTip" hidden>
+  <p class="viewer-tip" id="viewerTip"></p>
+  <div class="viewer-imgs" id="viewerImgs"></div>
+  <div class="actions">
+    <button type="button" id="viewerClose" class="primary">关闭</button>
+  </div>
+</div>
 
 <script src="core.js"></script>
 <script src="app.js"></script>
