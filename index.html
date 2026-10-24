@@ -4,10 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#5b5fc7">
-<!-- "only light": stops Chrome / 小米浏览器 forced dark mode from inverting the chart colours -->
 <meta name="color-scheme" content="only light">
 <meta name="format-detection" content="telephone=no, date=no">
-<!-- No external requests at all: data never leaves the phone. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>康复记录</title>
 <link rel="manifest" href="manifest.webmanifest">
@@ -24,7 +22,7 @@
   .banner { background: #fff3cd; color: #5c4400; padding: 8px 16px; font-size: 14px; }
   main { max-width: 640px; margin: 0 auto; padding: 12px; }
   .card { background: var(--card); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-  h2 { font-size: 16px; margin: 0 0 10px; }
+  h2 { font-size: 16px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   h3 { font-size: 15px; margin: 0 0 6px; }
   .field { display: block; margin: 0 0 12px; min-width: 0; }
   .field-label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
@@ -43,7 +41,6 @@
   button.small { min-height: 36px; padding: 4px 10px; font-size: 14px; }
   button:disabled { opacity: .45; cursor: default; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; }
-  /* lists */
   .list { list-style: none; margin: 0; padding: 0; }
   .item { border-left: 4px solid var(--pri); background: #f8f8ff; border-radius: 0 10px 10px 0; padding: 10px 12px; margin-bottom: 10px; }
   .item-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
@@ -62,9 +59,6 @@
   .tag { font-size: 12px; padding: 1px 6px; border-radius: 6px; background: #eef; color: var(--pri-dark); white-space: nowrap; }
   .tag.high { background: #ffe3e3; color: var(--high); }
   .tag.low { background: #e7f0ff; color: var(--low); }
-  /* charts */
-  .chart-card h3 { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-  .chart-card h3 small { color: var(--muted); font-weight: normal; font-size: 13px; }
   svg.chart { width: 100%; height: auto; display: block; }
   svg.chart text { font-size: 11px; fill: #555; font-family: inherit; }
   svg.chart .grid { stroke: #e3e4ef; stroke-width: 1; }
@@ -75,7 +69,6 @@
   svg.chart .dot.high { stroke: var(--high); fill: var(--high); }
   svg.chart .dot.low { stroke: var(--low); fill: var(--low); }
   svg.chart text.vlabel { font-size: 10.5px; fill: #333; }
-  /* bottom tabs */
   nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; background: #fff; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
   nav.tabs button { flex: 1; border: 0; border-radius: 0; background: none; min-height: 58px; flex-direction: column; font-size: 12px; padding: 4px 0; color: var(--muted); gap: 1px; }
   nav.tabs button span { font-size: 20px; line-height: 1.1; }
@@ -86,7 +79,6 @@
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   ol.steps { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }
   @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
-  /* image viewer: long-press "保存图片" saves to the gallery (小米浏览器 cannot save downloads reliably) */
   .viewer { position: fixed; inset: 0; z-index: 20; background: #1b1b1b; color: #fff; display: flex; flex-direction: column; padding: calc(10px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); }
   .viewer-tip { margin: 0 0 8px; font-size: 14px; line-height: 1.5; color: #f2f2f2; white-space: pre-line; }
   .viewer-tip b { color: #ffd166; }
@@ -96,6 +88,20 @@
   .viewer .actions { margin-top: 10px; }
   .viewer .actions button { flex: 1; }
   textarea.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  /* file upload wrapper */
+  .file-wrap { position: relative; display: inline-block; width: 100%; }
+  .file-wrap input[type=file] { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 2; }
+  .file-btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px; background: #eef; color: var(--pri-dark); border: 1px dashed var(--border); border-radius: 10px; font-size: 14px; min-height: 44px; pointer-events: none; }
+  /* timeline */
+  .timeline { position: relative; padding-left: 20px; }
+  .timeline::before { content: ''; position: absolute; left: 6px; top: 4px; bottom: 4px; width: 2px; background: var(--line); }
+  .tl-item { position: relative; margin-bottom: 8px; }
+  .tl-item::before { content: ''; position: absolute; left: -16px; top: 8px; width: 10px; height: 10px; border-radius: 50%; background: var(--pri); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+  .tl-title { font-size: 14px; font-weight: 600; cursor: pointer; padding: 8px 10px; background: #f8f8ff; border-radius: 8px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .tl-title:active { background: #eef; }
+  .tl-detail { display: none; padding: 10px 12px; background: #fff; border: 1px solid var(--line); border-radius: 0 0 10px 10px; margin-top: -4px; }
+  .tl-detail.open { display: block; }
+  .report-text-display { background: #f8f8ff; border-radius: 8px; padding: 8px 10px; margin: 6px 0; font-size: 14px; white-space: pre-wrap; }
 </style>
 </head>
 <body>
@@ -127,7 +133,10 @@
       <span class="hint">同一名称下的参考范围会自动沿用上一次填的值。</span>
     </form>
     <div id="charts"></div>
-    <div class="card"><h2>历史记录</h2><div id="markerHistory"></div></div>
+    <div class="card">
+      <h2>历史记录 <button type="button" class="small" id="toggleMarkerHistory" aria-expanded="false">展开</button></h2>
+      <div id="markerHistory" hidden></div>
+    </div>
   </section>
 
   <!-- 2. 影像报告 -->
@@ -138,7 +147,13 @@
         <label class="field"><span class="field-label">类型</span><select id="rType"></select></label>
         <label class="field"><span class="field-label">日期</span><input type="date" id="rDate" required></label>
       </div>
-      <label class="field"><span class="field-label">文件（PDF 或图片，可拍照）</span><input type="file" id="rFile" accept=".pdf,image/*" required></label>
+      <label class="field"><span class="field-label">报告文字/结论（可选）</span><textarea id="rText" rows="3" maxlength="5000" placeholder="手动录入报告文字、诊断结论等"></textarea></label>
+      <label class="field"><span class="field-label">文件（PDF 或图片，可拍照）</span>
+        <div class="file-wrap">
+          <div class="file-btn" id="rFileBtn">📎 点击选择文件</div>
+          <input type="file" id="rFile" accept=".pdf,image/*">
+        </div>
+      </label>
       <p class="err" id="rErr" role="alert" hidden></p>
       <button class="primary" type="submit">保存报告</button>
     </form>
@@ -155,11 +170,16 @@
       </div>
       <label class="field"><span class="field-label">方案/药物</span><input id="tPlan" maxlength="200" placeholder="如：顺铂+培美曲塞" autocomplete="off" required></label>
       <label class="field"><span class="field-label">备注（可选）</span><textarea id="tNote" rows="2" maxlength="2000" placeholder="反应、剂量等"></textarea></label>
-      <label class="field"><span class="field-label">附件（可选）</span><input type="file" id="tFile" accept=".pdf,image/*"></label>
+      <label class="field"><span class="field-label">附件（可选）</span>
+        <div class="file-wrap">
+          <div class="file-btn" id="tFileBtn">📎 点击选择文件</div>
+          <input type="file" id="tFile" accept=".pdf,image/*">
+        </div>
+      </label>
       <p class="err" id="tErr" role="alert" hidden></p>
       <button class="primary" type="submit">保存记录</button>
     </form>
-    <ul class="list card" id="treatList" aria-label="治疗记录列表"></ul>
+    <div class="card"><ul class="list timeline" id="treatList" aria-label="治疗记录列表"></ul></div>
   </section>
 
   <!-- 4. 医嘱笔记 -->
@@ -184,9 +204,9 @@
       <p class="hint" style="margin-top:0">所有记录只保存在这台手机的这个浏览器里，不会上传到任何服务器。清除浏览器数据、换浏览器或换手机都会丢失记录，请定期备份。</p>
       <p id="backupInfo"></p>
       <button type="button" class="primary" id="btnCopyBackup">复制备份内容</button>
-      <span class="hint">复制后粘贴到微信“文件传输助手”或手机“便签”里发送/保存，就算备份好了。包含标志物、治疗、医嘱全部文字记录；<b>报告照片和附件不包含</b>，请保留原件（相册照片、医院给的文件）。</span>
+      <span class="hint">复制后粘贴到微信"文件传输助手"或手机"便签"里发送/保存，就算备份好了。包含标志物、治疗、医嘱全部文字记录；<b>报告照片和附件不包含</b>，请保留原件（相册照片、医院给的文件）。</span>
       <div id="copyFallback" hidden>
-        <p class="err" style="margin:10px 0 6px">浏览器不允许自动复制。请长按下面的框 → “全选” → “复制”，复制好后点“我已复制”。</p>
+        <p class="err" style="margin:10px 0 6px">浏览器不允许自动复制。请长按下面的框 → "全选" → "复制"，复制好后点"我已复制"。</p>
         <textarea id="backupText" class="mono" rows="6" readonly aria-label="备份内容"></textarea>
         <button type="button" id="btnCopied" style="margin-top:6px">我已复制</button>
       </div>
@@ -196,13 +216,13 @@
       <label class="field"><span class="field-label">把之前保存的备份内容粘贴到这里</span><textarea id="restoreText" class="mono" rows="4" placeholder="长按 → 粘贴"></textarea></label>
       <p class="err" id="restoreErr" role="alert" hidden></p>
       <button type="button" class="primary" id="btnRestoreText">恢复</button>
-      <span class="hint">恢复是“合并”：只添加本机没有的记录，不会覆盖或删除现有记录。</span>
+      <span class="hint">恢复是"合并"：只添加本机没有的记录，不会覆盖或删除现有记录。</span>
     </div>
     <div class="card">
       <h2>完整备份文件（含报告）</h2>
-      <p class="hint" style="margin-top:0">把全部记录和报告文件打包成一个文件。<b>小米浏览器可能存不下来</b>：点完后请到“文件管理 → 下载”里确认有“康复记录备份_日期.json”。找不到就说明不支持，请用上面的复制备份。</p>
+      <p class="hint" style="margin-top:0">把全部记录和报告文件打包成一个文件。<b>小米浏览器可能存不下来</b>：点完后请到"文件管理 → 下载"里确认有"康复记录备份_日期.json"。找不到就说明不支持，请用上面的复制备份。</p>
       <button type="button" id="btnBackup">导出完整备份文件</button>
-      <label class="field" style="margin-top:12px"><span class="field-label">从备份文件恢复（.json，或旧版“共享副本” .html）</span><input type="file" id="importFile" accept=".json,.html,.htm,application/json,text/html"></label>
+      <label class="field" style="margin-top:12px"><span class="field-label">从备份文件恢复（.json，或旧版"共享副本" .html）</span><input type="file" id="importFile" accept=".json,.html,.htm,application/json,text/html"></label>
     </div>
     <div class="card">
       <h2>关于本机存储</h2>
@@ -212,8 +232,8 @@
       <h2>添加到桌面（小米浏览器）</h2>
       <ol class="steps">
         <li>用小米浏览器打开本页网址（必须是 https 网址，不能是手机里的文件）。</li>
-        <li>点底部菜单（☰ 或“三条横线”）→ “添加到桌面”或“添加至 → 桌面”。</li>
-        <li>桌面没出现图标：设置 → 应用设置 → 应用管理 → 浏览器 → 权限 → 打开“桌面快捷方式”，再添加一次。</li>
+        <li>点底部菜单（☰ 或"三条横线"）→ "添加到桌面"或"添加至 → 桌面"。</li>
+        <li>桌面没出现图标：设置 → 应用设置 → 应用管理 → 浏览器 → 权限 → 打开"桌面快捷方式"，再添加一次。</li>
         <li>以后都从这个图标或同一个浏览器打开。<b>换浏览器打开，看不到这里的记录。</b></li>
       </ol>
     </div>
