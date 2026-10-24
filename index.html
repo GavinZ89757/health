@@ -28,7 +28,7 @@
   .field-label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
   input, select, textarea { width: 100%; font: inherit; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text); min-height: 44px; }
   textarea { resize: vertical; }
-  input[type=file] { padding: 8px; font-size: 14px; }
+  input[type=file] { width: 0; height: 0; padding: 0; border: 0; }
   input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
   .grid3 { display: grid; grid-template-columns: 1.3fr 1fr; gap: 0 10px; }
@@ -88,11 +88,10 @@
   .viewer .actions { margin-top: 10px; }
   .viewer .actions button { flex: 1; }
   textarea.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
-  /* file upload wrapper */
-  .file-wrap { position: relative; display: inline-block; width: 100%; }
-  .file-wrap input[type=file] { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 2; }
-  .file-btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px; background: #eef; color: var(--pri-dark); border: 1px dashed var(--border); border-radius: 10px; font-size: 14px; min-height: 44px; pointer-events: none; }
-  /* timeline */
+  /* 上传按钮：纯视觉层，点击由原生 label 转发给隐藏的 input */
+  .file-btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px; background: #eef; color: var(--pri-dark); border: 1px dashed var(--border); border-radius: 10px; font-size: 14px; min-height: 44px; cursor: pointer; }
+  .file-btn:active { background: #e2e2fb; }
+  /* 时间轴 */
   .timeline { position: relative; padding-left: 20px; }
   .timeline::before { content: ''; position: absolute; left: 6px; top: 4px; bottom: 4px; width: 2px; background: var(--line); }
   .tl-item { position: relative; margin-bottom: 8px; }
@@ -149,10 +148,8 @@
       </div>
       <label class="field"><span class="field-label">报告文字/结论（可选）</span><textarea id="rText" rows="3" maxlength="5000" placeholder="手动录入报告文字、诊断结论等"></textarea></label>
       <label class="field"><span class="field-label">文件（PDF 或图片，可拍照）</span>
-        <div class="file-wrap">
-          <div class="file-btn" id="rFileBtn">📎 点击选择文件</div>
-          <input type="file" id="rFile" accept=".pdf,image/*">
-        </div>
+        <label for="rFile" class="file-btn" id="rFileBtn">📎 点击选择文件</label>
+        <input type="file" id="rFile" accept=".pdf,image/*" capture="environment">
       </label>
       <p class="err" id="rErr" role="alert" hidden></p>
       <button class="primary" type="submit">保存报告</button>
@@ -171,10 +168,8 @@
       <label class="field"><span class="field-label">方案/药物</span><input id="tPlan" maxlength="200" placeholder="如：顺铂+培美曲塞" autocomplete="off" required></label>
       <label class="field"><span class="field-label">备注（可选）</span><textarea id="tNote" rows="2" maxlength="2000" placeholder="反应、剂量等"></textarea></label>
       <label class="field"><span class="field-label">附件（可选）</span>
-        <div class="file-wrap">
-          <div class="file-btn" id="tFileBtn">📎 点击选择文件</div>
-          <input type="file" id="tFile" accept=".pdf,image/*">
-        </div>
+        <label for="tFile" class="file-btn" id="tFileBtn">📎 点击选择文件</label>
+        <input type="file" id="tFile" accept=".pdf,image/*" capture="environment">
       </label>
       <p class="err" id="tErr" role="alert" hidden></p>
       <button class="primary" type="submit">保存记录</button>
