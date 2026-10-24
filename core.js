@@ -10,7 +10,7 @@
   const REPORT_TYPES = ['CT', 'MRI', 'PET-CT', 'B超', '病理', '血检', '其他'];
   const TREATMENT_TYPES = ['化疗', '放疗', '手术', '靶向', '免疫', '其他'];
   const COMMON_MARKERS = ['CEA', 'CA125', 'CA19-9', 'CA15-3', 'CA72-4', 'AFP', 'CYFRA21-1', 'NSE', 'SCC', 'ProGRP', 'PSA'];
-  const LIMITS = { name: 40, doctor: 60, plan: 200, note: 2000, content: 5000, fileName: 200 };
+  const LIMITS = { name: 40, doctor: 60, plan: 200, note: 2000, content: 5000, fileName: 200, reportText: 5000 };
 
   // ---------- dates ----------
   const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -19,7 +19,6 @@
     d = d || new Date();
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   }
-  // Whole days since 1970-01-01, computed in UTC so DST never shifts a day.
   function dayNum(iso) {
     const [y, m, d] = iso.split('-').map(Number);
     return Math.round(Date.UTC(y, m - 1, d) / 86400000);
@@ -33,11 +32,6 @@
   }
 
   // ---------- input parsing ----------
-  /**
-   * Parse a typed number. Accepts the full-width digits / punctuation that Chinese input
-   * methods (搜狗/百度/讯飞, 小米输入法) often produce: "１２．５" → 12.5, "3，5" → 3.5.
-   * Returns null for empty input, NaN for unparseable input, otherwise a finite number.
-   */
   function parseNumber(input) {
     if (typeof input === 'number') return Number.isFinite(input) ? input : NaN;
     const s = String(input == null ? '' : input)
@@ -63,7 +57,7 @@
     return id;
   }
 
-  // ---------- record sanitizers (form input, stored data and imports all pass through these) ----------
+  // ---------- record sanitizers ----------
   function sanitizeMarker(m) {
     if (!m || typeof m !== 'object') return null;
     const name = str(m.name, LIMITS.name);
@@ -80,7 +74,6 @@
     return { id: toId(n.id) || newId(), date: n.date, doctor: str(n.doctor, LIMITS.doctor), content };
   }
   const isDataUrl = (s) => typeof s === 'string' && /^data:[^,]*;base64,/.test(s);
-  /** Treatment from a form, the database or an import. Attachment (if any) stays as given: Blob or data URL. */
   function sanitizeTreatment(t) {
     if (!t || typeof t !== 'object') return null;
     const plan = str(t.plan, LIMITS.plan);
@@ -93,7 +86,6 @@
       note: typeof t.note === 'string' ? t.note.trim().slice(0, LIMITS.note) : '',
       file: null,
     };
-    // new format: t.file = { fileName, data|blob } ; old single-file app: t.fileName + t.data
     const f = t.file && typeof t.file === 'object' ? t.file : { fileName: t.fileName, data: t.data };
     const fileName = str(f.fileName, LIMITS.fileName);
     if (fileName && (isDataUrl(f.data) || f.blob)) out.file = { fileName, data: f.data, blob: f.blob, mime: str(f.mime, 100) };
@@ -111,6 +103,7 @@
       data: r.data,
       blob: r.blob,
       mime: str(r.mime, 100),
+      text: typeof r.text === 'string' ? r.text.trim().slice(0, LIMITS.reportText) : '',
     };
   }
   function sanitizeAll(src) {
@@ -150,10 +143,6 @@
       notes: data.notes || [],
     };
   }
-  /**
-   * Text-only backup for browsers that cannot download files (小米浏览器): small enough to paste into
-   * 微信“文件传输助手” or 便签. Report files and treatment attachments are left out.
-   */
   function buildTextBackup(data, now) {
     const b = buildBackup({
       markers: data.markers,
@@ -165,7 +154,6 @@
     b.omittedFiles = (data.reports || []).length + (data.treatments || []).filter((t) => t.file).length;
     return b;
   }
-  /** Old single-file app: "共享副本" HTML with `window.__SHARED_DATA__ = {...};</script>` injected (possibly several times). */
   function extractSharedData(html) {
     const marker = 'window.__SHARED_DATA__ = ';
     let found = null;
@@ -180,30 +168,27 @@
       }
       from = start;
     }
-    return found; // the last injected copy is the newest one
+    return found;
   }
-  /** Parse a backup (.json or pasted text) or an old 共享副本 (.html). Throws Error with a Chinese message when unrecognised. */
   function parseImport(text) {
     let t = String(text || '').replace(/^\uFEFF/, '').trim();
-    // Pasted from 微信/便签: tolerate extra text around the backup.
     if (!t.startsWith('{') && !t.includes('__SHARED_DATA__') && t.includes(`"app":"${BACKUP_APP}"`)) {
       t = t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1);
     }
     let raw, source;
     if (t.startsWith('{')) {
       try { raw = JSON.parse(t); } catch (_) { throw new Error('备份内容不完整或已损坏，无法读取。如果是从微信复制的，请确认复制了全部内容。'); }
-      if (!raw || raw.app !== BACKUP_APP) throw new Error('这不是“康复记录”的备份文件。');
+      if (!raw || raw.app !== BACKUP_APP) throw new Error('这不是"康复记录"的备份文件。');
       source = 'backup';
     } else if (t.includes('__SHARED_DATA__')) {
       raw = extractSharedData(t);
       if (!raw) throw new Error('共享副本里的数据无法读取。');
       source = 'shared-html';
     } else {
-      throw new Error('内容格式不对：请选择或粘贴“康复记录”的备份内容，或旧版导出的“康复记录_共享副本_….html”。');
+      throw new Error('内容格式不对：请选择或粘贴"康复记录"的备份内容，或旧版导出的"康复记录_共享副本_….html"。');
     }
     return Object.assign(sanitizeAll(raw), { source });
   }
-  /** Split incoming records into new ones and ones already present (same id). Never overwrites. */
   function splitNew(existing, incoming) {
     const have = new Set(existing.map((x) => x.id));
     const fresh = [];
@@ -217,7 +202,6 @@
 
   // ---------- markers ----------
   const byDateAsc = (a, b) => (a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1);
-  /** Group by marker name; ref range = latest record that has one. Groups ordered by most recent entry. */
   function groupMarkers(markers) {
     const map = new Map();
     for (const m of markers) {
@@ -247,14 +231,9 @@
     const f = raw / mag;
     return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * mag;
   }
-  /**
-   * Layout for one trend chart. X is proportional to real time (3 days and 3 months look different),
-   * Y fits the data and reference range instead of always starting at zero.
-   */
   function chartGeometry(points, ref, opts) {
     const o = Object.assign({ width: 340, height: 190, left: 44, right: 14, top: 12, bottom: 30, yTicks: 4 }, opts);
     const values = points.map((p) => p.value);
-    // upper limit only (e.g. CA125 ≤ 35): the normal band runs down to 0, so show 0 when data is non-negative
     const refLo = ref ? (ref.min !== null ? ref.min : ref.max !== null && Math.min(...values) >= 0 ? 0 : null) : null;
     const all = values.concat(ref ? [refLo, ref.max].filter((v) => v !== null) : []);
     let lo = Math.min(...all), hi = Math.max(...all);
@@ -291,18 +270,14 @@
       path: dots.map((d, i) => `${i ? 'L' : 'M'}${d.x},${d.y}`).join(' '),
     };
   }
-  /** Compact number for labels: 3.0 → "3", 12.345 → "12.35" */
   function fmt(v) {
     return String(Math.round(v * 100) / 100);
   }
-  /** "0 – 5", "≤ 35", "≥ 2" */
   function refText(ref) {
     if (!ref) return '';
     if (ref.min !== null && ref.max !== null) return `${fmt(ref.min)} – ${fmt(ref.max)}`;
     return ref.max !== null ? `≤ ${fmt(ref.max)}` : `≥ ${fmt(ref.min)}`;
   }
-
-  /** Character-level line wrapping (works for Chinese, which has no spaces). measure(str) → width. */
   function wrapLines(text, maxWidth, measure) {
     const out = [];
     for (const para of String(text == null ? '' : text).split('\n')) {
@@ -315,7 +290,6 @@
     }
     return out;
   }
-  /** Split blocks (each with a height) into pages no taller than maxHeight. A block taller than a page gets its own page. */
   function paginate(heights, maxHeight) {
     const pages = [];
     let cur = [], h = 0;
@@ -326,7 +300,6 @@
     if (cur.length) pages.push(cur);
     return pages;
   }
-
   function makeDemoData(today) {
     const t = dayNum(today);
     const d = (n) => fromDayNum(t - n);
