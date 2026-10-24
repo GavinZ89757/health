@@ -12,7 +12,6 @@
   const COMMON_MARKERS = ['CEA', 'CA125', 'CA19-9', 'CA15-3', 'CA72-4', 'AFP', 'CYFRA21-1', 'NSE', 'SCC', 'ProGRP', 'PSA'];
   const LIMITS = { name: 40, doctor: 60, plan: 200, note: 2000, content: 5000, fileName: 200, reportText: 5000 };
 
-  // ---------- dates ----------
   const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
   const pad2 = (n) => String(n).padStart(2, '0');
   function todayISO(d) {
@@ -31,7 +30,6 @@
     return typeof iso === 'string' && DATE_RE.test(iso) && fromDayNum(dayNum(iso)) === iso;
   }
 
-  // ---------- input parsing ----------
   function parseNumber(input) {
     if (typeof input === 'number') return Number.isFinite(input) ? input : NaN;
     const s = String(input == null ? '' : input)
@@ -57,7 +55,6 @@
     return id;
   }
 
-  // ---------- record sanitizers ----------
   function sanitizeMarker(m) {
     if (!m || typeof m !== 'object') return null;
     const name = str(m.name, LIMITS.name);
@@ -120,7 +117,6 @@
     return out;
   }
 
-  // ---------- data URLs ----------
   function dataUrlToBytes(dataUrl) {
     const m = /^data:([^,;]*)(;[^,]*)?;base64,(.*)$/s.exec(dataUrl || '');
     if (!m) return null;
@@ -130,7 +126,6 @@
     return { mime: m[1] || 'application/octet-stream', bytes };
   }
 
-  // ---------- backup / import ----------
   const BACKUP_APP = 'kangfu-records';
   function buildBackup(data, now) {
     return {
@@ -177,7 +172,7 @@
     }
     let raw, source;
     if (t.startsWith('{')) {
-      try { raw = JSON.parse(t); } catch (_) { throw new Error('备份内容不完整或已损坏，无法读取。如果是从微信复制的，请确认复制了全部内容。'); }
+      try { raw = JSON.parse(t); } catch (_) { throw new Error('备份内容不完整或已损坏，无法读取。'); }
       if (!raw || raw.app !== BACKUP_APP) throw new Error('这不是"康复记录"的备份文件。');
       source = 'backup';
     } else if (t.includes('__SHARED_DATA__')) {
@@ -185,7 +180,7 @@
       if (!raw) throw new Error('共享副本里的数据无法读取。');
       source = 'shared-html';
     } else {
-      throw new Error('内容格式不对：请选择或粘贴"康复记录"的备份内容，或旧版导出的"康复记录_共享副本_….html"。');
+      throw new Error('内容格式不对。');
     }
     return Object.assign(sanitizeAll(raw), { source });
   }
@@ -200,7 +195,6 @@
     return { fresh, dup };
   }
 
-  // ---------- markers ----------
   const byDateAsc = (a, b) => (a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1);
   function groupMarkers(markers) {
     const map = new Map();
@@ -270,9 +264,7 @@
       path: dots.map((d, i) => `${i ? 'L' : 'M'}${d.x},${d.y}`).join(' '),
     };
   }
-  function fmt(v) {
-    return String(Math.round(v * 100) / 100);
-  }
+  function fmt(v) { return String(Math.round(v * 100) / 100); }
   function refText(ref) {
     if (!ref) return '';
     if (ref.min !== null && ref.max !== null) return `${fmt(ref.min)} – ${fmt(ref.max)}`;
