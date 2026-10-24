@@ -306,8 +306,7 @@
       const title = el('div', 'tl-title');
       title.append(el('span', null, `${mdShort(t.date)} · ${t.type} · ${t.plan}`));
       title.addEventListener('click', () => {
-        const detail = item.querySelector('.tl-detail');
-        detail.classList.toggle('open');
+        item.querySelector('.tl-detail').classList.toggle('open');
       });
       const detail = el('div', 'tl-detail');
       if (t.note) detail.append(el('p', null, t.note));
@@ -409,7 +408,6 @@
     }
   });
 
-  // marker form
   $('markerForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = $('mName').value.trim(), date = $('mDate').value;
@@ -430,15 +428,13 @@
     } catch (err) { showErr('mErr', friendlyError(err)); }
   });
 
-  // report form (with text field)
   $('reportForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const file = $('rFile').files[0], date = $('rDate').value;
     if (!KF.isValidDate(date)) return showErr('rErr', '请选择日期');
     const fe = checkFile(file);
     if (fe) return showErr('rErr', fe);
-    const text = $('rText').value.trim();
-    const r = KF.sanitizeReport({ id: KF.newId(), type: $('rType').value, date, fileName: file.name, blob: file, mime: file.type, text });
+    const r = KF.sanitizeReport({ id: KF.newId(), type: $('rType').value, date, fileName: file.name, blob: file, mime: file.type, text: $('rText').value.trim() });
     try {
       await saveItem('reports', r);
       showErr('rErr', '');
@@ -449,7 +445,6 @@
     } catch (err) { showErr('rErr', friendlyError(err)); }
   });
 
-  // treatment form
   $('treatForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const date = $('tDate').value, plan = $('tPlan').value.trim(), file = $('tFile').files[0];
@@ -469,7 +464,6 @@
     } catch (err) { showErr('tErr', friendlyError(err)); }
   });
 
-  // note form
   $('noteForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const date = $('nDate').value, content = $('nContent').value.trim();
@@ -495,25 +489,17 @@
     btn.setAttribute('aria-expanded', String(open));
   });
 
-  // ---------- file input click fix (mobile compatibility) ----------
-  function setupFileInput(btnId, inputId) {
-    const btn = $(btnId);
+  // ---------- file label: show chosen file name (no JS click() —原生 label 转发) ----------
+  function bindFileLabel(inputId, btnId) {
     const input = $(inputId);
-    if (!btn || !input) return;
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      input.click();
-    });
+    const label = $(btnId);
+    if (!input || !label) return;
     input.addEventListener('change', () => {
-      if (input.files.length > 0) {
-        btn.textContent = '📎 ' + input.files[0].name;
-      } else {
-        btn.textContent = btnId === 'rFileBtn' ? '📎 点击选择文件' : '📎 点击选择文件';
-      }
+      label.textContent = input.files.length ? '📎 ' + input.files[0].name : '📎 点击选择文件';
     });
   }
-  setupFileInput('rFileBtn', 'rFile');
-  setupFileInput('tFileBtn', 'tFile');
+  bindFileLabel('rFile', 'rFileBtn');
+  bindFileLabel('tFile', 'tFileBtn');
 
   // ---------- backup / restore ----------
   async function fileToJson(f) {
