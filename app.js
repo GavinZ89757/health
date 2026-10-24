@@ -7,16 +7,16 @@
   const KF = window.KF;
   const $ = (id) => document.getElementById(id);
   const DEMO = new URLSearchParams(location.search).has('demo');
-  const DB_NAME = 'kangfu-records';      // unique name: other apps on the same github.io site share this origin
+  const DB_NAME = 'kangfu-records';
   const STORES = ['markers', 'reports', 'treatments', 'notes'];
   const MAX_FILE = 50 * 1024 * 1024;
   const BACKUP_REMIND_DAYS = 30;
 
   const data = { markers: [], reports: [], treatments: [], notes: [] };
   const meta = { lastBackup: null };
-  let idb = null;               // null in demo mode or when IndexedDB is unavailable
+  let idb = null;
   let installPrompt = null;
-  let objectUrls = [];          // revoked on every re-render
+  let objectUrls = [];
 
   // ---------- IndexedDB ----------
   const req2p = (req) => new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
@@ -30,10 +30,9 @@
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
-      req.onblocked = () => reject(new Error('数据库被另一个窗口占用，请关闭其他“康复记录”窗口后重试。'));
+      req.onblocked = () => reject(new Error('数据库被另一个窗口占用，请关闭其他"康复记录"窗口后重试。'));
     });
   }
-  /** Run one write transaction; resolves only after the data is committed to disk. */
   function write(store, fn) {
     if (!idb) return Promise.resolve();
     return new Promise((resolve, reject) => {
@@ -72,7 +71,7 @@
   function el(tag, cls, text) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
-    if (text != null) e.textContent = text;   // always textContent: user text is never parsed as HTML
+    if (text != null) e.textContent = text;
     return e;
   }
   function btn(text, cls, onClick, label) {
@@ -125,7 +124,6 @@
       }
     } catch (err) {
       if (err && err.name === 'AbortError') return 'cancelled';
-      // any other share failure → fall back to a normal download
     }
     const url = URL.createObjectURL(blob);
     const a = el('a');
@@ -137,18 +135,17 @@
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     return 'downloaded';
   }
-  /** Open / save an attachment. Images go to the long-press viewer; other files (PDF) are handed to the browser. */
   async function openFile(f) {
     const blob = fileBlob(f);
     if (!blob) return toast('文件无法读取');
     if (/^image\//.test(blob.type) || /\.(jpe?g|png|gif|webp|bmp|heic)$/i.test(f.fileName)) {
       try {
         const url = await blobToDataUrl(blob);
-        return openViewer([url], [['长按图片 → 选“保存图片”', true], ['，就会存进手机相册。']], f.fileName);
+        return openViewer([url], [['长按图片 → 选"保存图片"', true], ['，就会存进手机相册。']], f.fileName);
       } catch (_) { return toast('图片无法打开'); }
     }
     const how = await shareOrDownload(blob, f.fileName, blob.type || 'application/octet-stream');
-    if (how === 'downloaded') toast('已交给浏览器下载。如果“文件管理 → 下载”里找不到，说明这个浏览器打不开网页里的 PDF，请查看原文件。');
+    if (how === 'downloaded') toast('已交给浏览器下载。如果"文件管理 → 下载"里找不到，说明这个浏览器打不开网页里的 PDF，请查看原文件。');
   }
   function fileActions(f) {
     const box = el('div', 'actions');
@@ -157,11 +154,8 @@
     return box;
   }
 
-  // ---------- image viewer (long-press to save) ----------
-  // Visibility is driven by the [hidden] attribute; index.html has "[hidden] { display: none !important }"
-  // so the .viewer display:flex rule can never keep it on screen.
+  // ---------- image viewer ----------
   let viewerReturn = null;
-  /** tip: list of [text, bold?] segments, rendered with textContent only. */
   function openViewer(urls, tip, alt) {
     viewerReturn = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
     const tipEl = $('viewerTip');
@@ -204,7 +198,7 @@
     catch (err) { alert(friendlyError(err)); }
   }
 
-  // ---------- charts (SVG, no external library) ----------
+  // ---------- charts ----------
   const SVG = 'http://www.w3.org/2000/svg';
   function svgEl(tag, attrs, text) {
     const e = document.createElementNS(SVG, tag);
@@ -279,7 +273,7 @@
     for (const n of names) { const o = el('option'); o.value = n; dl.append(o); }
   }
 
-  // ---------- render: reports / treatments / notes ----------
+  // ---------- render: reports ----------
   function emptyLi(text) { const li = el('li', 'empty', text); return li; }
   function renderReports() {
     const ul = $('reportList');
@@ -291,6 +285,7 @@
       const head = el('div', 'item-head');
       head.append(el('b', null, r.type + ' 报告'), el('span', 'item-date', md(r.date)));
       li.append(head, el('p', null, r.fileName));
+      if (r.text) li.append(el('div', 'report-text-display', r.text));
       const th = thumbFor(r);
       if (th) li.append(th);
       const acts = fileActions(r);
@@ -299,24 +294,48 @@
       ul.append(li);
     }
   }
+
+  // ---------- render: treatments (timeline) ----------
   function renderTreatments() {
     const ul = $('treatList');
     ul.textContent = '';
     const list = data.treatments.slice().sort(byDateDesc);
-    if (!list.length) ul.append(emptyLi('还没有治疗记录。'));
+    if (!list.length) { ul.append(emptyLi('还没有治疗记录。')); return; }
     for (const t of list) {
-      const li = el('li', 'item');
-      const head = el('div', 'item-head');
-      head.append(el('b', null, `${t.type} · ${t.plan}`), el('span', 'item-date', md(t.date)));
-      li.append(head);
-      if (t.note) li.append(el('p', null, t.note));
-      const acts = t.file ? fileActions(t.file) : el('div', 'actions');
-      if (t.file) { li.append(el('p', 'hint', '📎 ' + t.file.fileName)); const th = thumbFor(t.file); if (th) li.append(th); }
+      const item = el('div', 'tl-item');
+      const title = el('div', 'tl-title');
+      title.append(el('span', null, `${mdShort(t.date)} · ${t.type} · ${t.plan}`));
+      title.addEventListener('click', () => {
+        const detail = item.querySelector('.tl-detail');
+        detail.classList.toggle('open');
+      });
+      const detail = el('div', 'tl-detail');
+      if (t.note) detail.append(el('p', null, t.note));
+      if (t.file) {
+        detail.append(el('p', 'hint', '📎 ' + t.file.fileName));
+        const th = thumbFor(t.file);
+        if (th) detail.append(th);
+        detail.append(fileActions(t.file));
+      }
+      const acts = el('div', 'actions');
+      acts.append(btn('编辑', 'small', () => editTreatment(t), `编辑 ${t.date} ${t.plan}`));
       acts.append(btn('删除', 'small danger', () => confirmDelete('treatments', t.id, '治疗记录'), `删除 ${t.date} ${t.plan}`));
-      li.append(acts);
-      ul.append(li);
+      detail.append(acts);
+      item.append(title, detail);
+      ul.append(item);
     }
   }
+  function editTreatment(t) {
+    const newPlan = prompt('修改方案/药物', t.plan);
+    if (newPlan === null) return;
+    const newNote = prompt('修改备注', t.note || '');
+    if (newNote === null) return;
+    t.plan = newPlan.trim() || t.plan;
+    t.note = newNote.trim();
+    saveItem('treatments', t).then(() => { renderAll(); toast('已更新'); }).catch((err) => alert(friendlyError(err)));
+  }
+
+  // ---------- render: notes ----------
   function renderNotes() {
     const ul = $('noteList');
     ul.textContent = '';
@@ -345,7 +364,7 @@
     const banner = $('backupBanner');
     const due = !DEMO && n > 0 && (ago === null || ago >= BACKUP_REMIND_DAYS);
     banner.hidden = !due;
-    if (due) banner.textContent = ago === null ? '提醒：记录还没有备份过，换手机或清理浏览器会丢失。请到“备份”页导出。' : `提醒：已经 ${ago} 天没备份了，请到“备份”页导出。`;
+    if (due) banner.textContent = ago === null ? '提醒：记录还没有备份过，换手机或清理浏览器会丢失。请到"备份"页导出。' : `提醒：已经 ${ago} 天没备份了，请到"备份"页导出。`;
   }
   async function renderStorage() {
     const box = $('storageInfo');
@@ -353,12 +372,12 @@
     if (!DEMO && idb && navigator.storage) {
       try {
         const persisted = navigator.storage.persisted ? await navigator.storage.persisted() : false;
-        txt += persisted ? '已开启“持久保存”：系统清理空间时不会自动删掉这些记录。' : '未开启“持久保存”：安装到桌面后通常会自动开启。';
+        txt += persisted ? '已开启"持久保存"：系统清理空间时不会自动删掉这些记录。' : '未开启"持久保存"：安装到桌面后通常会自动开启。';
         if (navigator.storage.estimate) {
           const e = await navigator.storage.estimate();
           if (e.usage != null) txt += ` 已用约 ${fmtSize(e.usage)}。`;
         }
-      } catch (_) { /* not supported */ }
+      } catch (_) { }
     }
     if (location.protocol === 'file:' || location.protocol === 'content:') txt += ' ⚠ 现在是以文件方式打开的，不能安装到桌面，也不能离线使用。';
     box.textContent = txt;
@@ -382,7 +401,6 @@
   function fillSelect(id, options) { const s = $(id); for (const o of options) s.append(el('option', null, o)); }
 
   $('mName').addEventListener('change', () => {
-    // reuse the last reference range typed for this marker
     const name = $('mName').value.trim();
     const g = KF.groupMarkers(data.markers).find((x) => x.name === name);
     if (g && g.ref && !$('mRefMin').value && !$('mRefMax').value) {
@@ -390,6 +408,8 @@
       $('mRefMax').value = g.ref.max ?? '';
     }
   });
+
+  // marker form
   $('markerForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = $('mName').value.trim(), date = $('mDate').value;
@@ -410,23 +430,26 @@
     } catch (err) { showErr('mErr', friendlyError(err)); }
   });
 
+  // report form (with text field)
   $('reportForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const file = $('rFile').files[0], date = $('rDate').value;
     if (!KF.isValidDate(date)) return showErr('rErr', '请选择日期');
     const fe = checkFile(file);
     if (fe) return showErr('rErr', fe);
-    // Stored as a Blob (not base64 text): smaller and no 5 MB localStorage limit.
-    const r = KF.sanitizeReport({ id: KF.newId(), type: $('rType').value, date, fileName: file.name, blob: file, mime: file.type });
+    const text = $('rText').value.trim();
+    const r = KF.sanitizeReport({ id: KF.newId(), type: $('rType').value, date, fileName: file.name, blob: file, mime: file.type, text });
     try {
       await saveItem('reports', r);
       showErr('rErr', '');
       $('rFile').value = '';
+      $('rText').value = '';
       renderAll();
       toast('报告已保存');
     } catch (err) { showErr('rErr', friendlyError(err)); }
   });
 
+  // treatment form
   $('treatForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const date = $('tDate').value, plan = $('tPlan').value.trim(), file = $('tFile').files[0];
@@ -446,6 +469,7 @@
     } catch (err) { showErr('tErr', friendlyError(err)); }
   });
 
+  // note form
   $('noteForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const date = $('nDate').value, content = $('nContent').value.trim();
@@ -460,6 +484,36 @@
       toast('笔记已保存');
     } catch (err) { showErr('nErr', friendlyError(err)); }
   });
+
+  // ---------- marker history toggle ----------
+  $('toggleMarkerHistory').addEventListener('click', () => {
+    const hist = $('markerHistory');
+    const btn = $('toggleMarkerHistory');
+    const open = hist.hidden;
+    hist.hidden = !open;
+    btn.textContent = open ? '收起' : '展开';
+    btn.setAttribute('aria-expanded', String(open));
+  });
+
+  // ---------- file input click fix (mobile compatibility) ----------
+  function setupFileInput(btnId, inputId) {
+    const btn = $(btnId);
+    const input = $(inputId);
+    if (!btn || !input) return;
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      input.click();
+    });
+    input.addEventListener('change', () => {
+      if (input.files.length > 0) {
+        btn.textContent = '📎 ' + input.files[0].name;
+      } else {
+        btn.textContent = btnId === 'rFileBtn' ? '📎 点击选择文件' : '📎 点击选择文件';
+      }
+    });
+  }
+  setupFileInput('rFileBtn', 'rFile');
+  setupFileInput('tFileBtn', 'tFile');
 
   // ---------- backup / restore ----------
   async function fileToJson(f) {
@@ -476,19 +530,16 @@
     b.textContent = '正在打包…';
     try {
       const reports = [];
-      for (const r of data.reports) reports.push(Object.assign({ id: r.id, date: r.date, type: r.type }, await fileToJson(r)));
+      for (const r of data.reports) reports.push(Object.assign({ id: r.id, date: r.date, type: r.type, text: r.text || '' }, await fileToJson(r)));
       const treatments = [];
       for (const t of data.treatments) treatments.push({ id: t.id, date: t.date, type: t.type, plan: t.plan, note: t.note, file: await fileToJson(t.file) });
       const backup = KF.buildBackup({ markers: data.markers, notes: data.notes, reports, treatments });
       const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
       const how = await shareOrDownload(blob, `康复记录备份_${today()}.json`, 'application/json');
       if (how === 'cancelled') return;
-      if (how === 'shared') {
-        await markBackedUp();
-        toast('备份已分享');
-      } else {
-        // A download cannot be confirmed (小米浏览器 often drops it silently), so it does not count as a backup.
-        alert(`已交给浏览器下载（${fmtSize(blob.size)}）。\n请到“文件管理 → 下载”确认有“康复记录备份_${today()}.json”。\n找不到就说明这个浏览器不支持下载，请改用“复制备份内容”。`);
+      if (how === 'shared') { await markBackedUp(); toast('备份已分享'); }
+      else {
+        alert(`已交给浏览器下载（${fmtSize(blob.size)}）。\n请到"文件管理 → 下载"确认有"康复记录备份_${today()}.json"。\n找不到就说明这个浏览器不支持下载，请改用"复制备份内容"。`);
       }
     } catch (err) {
       alert('备份失败：' + ((err && err.message) || err));
@@ -504,7 +555,6 @@
     renderBackup();
   }
 
-  // ---------- text backup (copy / paste) ----------
   function copyWithExecCommand(text) {
     const ta = el('textarea');
     ta.value = text;
@@ -525,13 +575,11 @@
     const text = JSON.stringify(backup);
     $('copyFallback').hidden = true;
     let ok = false;
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); ok = true; }
-    } catch (_) { ok = false; }
+    try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); ok = true; } } catch (_) { ok = false; }
     if (!ok) ok = copyWithExecCommand(text);
     if (ok) {
       await markBackedUp();
-      alert(`已复制备份内容（${text.length} 个字符）。\n现在打开微信“文件传输助手”或“便签”，长按输入框 → 粘贴 → 发送/保存。` +
+      alert(`已复制备份内容（${text.length} 个字符）。\n现在打开微信"文件传输助手"或"便签"，长按输入框 → 粘贴 → 发送/保存。` +
         (backup.omittedFiles ? `\n\n注意：${backup.omittedFiles} 个报告/附件文件不在文字备份里，请保留原件。` : ''));
     } else {
       $('backupText').value = text;
@@ -550,13 +598,11 @@
     const text = $('restoreText').value;
     if (!text.trim()) return showErr('restoreErr', '请先粘贴备份内容');
     let parsed;
-    try { parsed = KF.parseImport(text); }
-    catch (err) { return showErr('restoreErr', err.message); }
+    try { parsed = KF.parseImport(text); } catch (err) { return showErr('restoreErr', err.message); }
     showErr('restoreErr', '');
     if (await importParsed(parsed)) $('restoreText').value = '';
   });
 
-  /** Imported files arrive as data URLs; store them as Blobs like newly uploaded ones. */
   function toStoredFile(f) {
     if (!f) return null;
     if (f.blob) return f;
@@ -569,12 +615,10 @@
     input.value = '';
     if (!file) return;
     let parsed;
-    try { parsed = KF.parseImport(await file.text()); }
-    catch (err) { return alert(err.message); }
+    try { parsed = KF.parseImport(await file.text()); } catch (err) { return alert(err.message); }
     await importParsed(parsed);
   });
 
-  /** Merge parsed backup into this device. Returns true when something was added. */
   async function importParsed(parsed) {
     const plan = {};
     let fresh = 0, dup = 0;
@@ -592,7 +636,7 @@
           if (s === 'reports') {
             const f = toStoredFile(item);
             if (!f) continue;
-            await saveItem(s, { id: item.id, date: item.date, type: item.type, fileName: f.fileName, blob: f.blob, mime: f.mime });
+            await saveItem(s, { id: item.id, date: item.date, type: item.type, fileName: f.fileName, blob: f.blob, mime: f.mime, text: item.text || '' });
           } else if (s === 'treatments') {
             await saveItem(s, Object.assign({}, item, { file: toStoredFile(item.file) }));
           } else {
@@ -621,8 +665,7 @@
     } catch (err) { alert(friendlyError(err)); }
   });
 
-  // ---------- report image (drawn on a canvas; long-press to save to the gallery) ----------
-  // 小米浏览器 cannot print to PDF, so the report is a long picture (split into several if very long).
+  // ---------- report image ----------
   const REPORT_W = 720, REPORT_SCALE = 2, PAGE_MAX = 4800, PAD = 28;
   const FONT = '-apple-system, Roboto, "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif';
   const CHART_CSS = 'text{font-size:11px;fill:#555;font-family:sans-serif}.grid{stroke:#e3e4ef;stroke-width:1}.axis{stroke:#b8bad3;stroke-width:1}' +
@@ -704,7 +747,7 @@
     };
     section('治疗记录', data.treatments, (t) => item(`${t.date}　${t.type} · ${t.plan}`, t.note));
     section('医嘱与笔记', data.notes, (n) => item(`${n.date}　${n.doctor || '笔记'}`, n.content));
-    section('检查报告', data.reports, (r) => item(`${r.date}　${r.type}`, r.fileName));
+    section('检查报告', data.reports, (r) => item(`${r.date}　${r.type}`, r.fileName + (r.text ? '\n' + r.text : '')));
     return blocks;
   }
   async function renderReportImages() {
@@ -738,7 +781,7 @@
     b.textContent = '生成中…';
     try {
       const urls = await renderReportImages();
-      const tip = [['长按图片 → 选“保存图片”', true], ['，就会存进手机相册，可以直接给医生看或发微信。']];
+      const tip = [['长按图片 → 选"保存图片"', true], ['，就会存进手机相册，可以直接给医生看或发微信。']];
       if (urls.length > 1) tip.push([`\n内容较多，共 ${urls.length} 张，请往下滑逐张保存。`]);
       openViewer(urls, tip, '康复记录报告');
     } catch (err) {
@@ -775,7 +818,6 @@
   });
   window.addEventListener('appinstalled', () => { $('btnInstall').hidden = true; toast('已安装到桌面'); });
 
-  // Refresh "today" if the app was left open over midnight.
   let shownDay = today();
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && today() !== shownDay) {
@@ -810,7 +852,7 @@
     }
     const secure = location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname);
     if ('serviceWorker' in navigator && secure) {
-      navigator.serviceWorker.register('sw.js').catch(() => { /* offline cache is optional */ });
+      navigator.serviceWorker.register('sw.js').catch(() => { });
     }
   }
   start();
