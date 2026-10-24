@@ -28,7 +28,8 @@
   .field-label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
   input, select, textarea { width: 100%; font: inherit; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text); min-height: 44px; }
   textarea { resize: vertical; }
-  input[type=file] { width: 0; height: 0; padding: 0; border: 0; }
+  input[type=file] { padding: 10px 12px; font-size: 14px; border: 2px dashed var(--border); background: #f8f8ff; cursor: pointer; min-height: 48px; }
+  input[type=file]:active { background: #eef; }
   input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
   .grid3 { display: grid; grid-template-columns: 1.3fr 1fr; gap: 0 10px; }
@@ -88,10 +89,6 @@
   .viewer .actions { margin-top: 10px; }
   .viewer .actions button { flex: 1; }
   textarea.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
-  /* 上传按钮：纯视觉层，点击由原生 label 转发给隐藏的 input */
-  .file-btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px; background: #eef; color: var(--pri-dark); border: 1px dashed var(--border); border-radius: 10px; font-size: 14px; min-height: 44px; cursor: pointer; }
-  .file-btn:active { background: #e2e2fb; }
-  /* 时间轴 */
   .timeline { position: relative; padding-left: 20px; }
   .timeline::before { content: ''; position: absolute; left: 6px; top: 4px; bottom: 4px; width: 2px; background: var(--line); }
   .tl-item { position: relative; margin-bottom: 8px; }
@@ -148,8 +145,7 @@
       </div>
       <label class="field"><span class="field-label">报告文字/结论（可选）</span><textarea id="rText" rows="3" maxlength="5000" placeholder="手动录入报告文字、诊断结论等"></textarea></label>
       <label class="field"><span class="field-label">文件（PDF 或图片，可拍照）</span>
-        <label for="rFile" class="file-btn" id="rFileBtn">📎 点击选择文件</label>
-        <input type="file" id="rFile" accept=".pdf,image/*" capture="environment">
+        <input type="file" id="rFile" accept=".pdf,image/*">
       </label>
       <p class="err" id="rErr" role="alert" hidden></p>
       <button class="primary" type="submit">保存报告</button>
@@ -168,8 +164,7 @@
       <label class="field"><span class="field-label">方案/药物</span><input id="tPlan" maxlength="200" placeholder="如：顺铂+培美曲塞" autocomplete="off" required></label>
       <label class="field"><span class="field-label">备注（可选）</span><textarea id="tNote" rows="2" maxlength="2000" placeholder="反应、剂量等"></textarea></label>
       <label class="field"><span class="field-label">附件（可选）</span>
-        <label for="tFile" class="file-btn" id="tFileBtn">📎 点击选择文件</label>
-        <input type="file" id="tFile" accept=".pdf,image/*" capture="environment">
+        <input type="file" id="tFile" accept=".pdf,image/*">
       </label>
       <p class="err" id="tErr" role="alert" hidden></p>
       <button class="primary" type="submit">保存记录</button>
@@ -196,10 +191,10 @@
   <section id="tab-backup" role="tabpanel" aria-labelledby="t-backup" hidden>
     <div class="card">
       <h2>备份（推荐：复制文字备份）</h2>
-      <p class="hint" style="margin-top:0">所有记录只保存在这台手机的这个浏览器里，不会上传到任何服务器。清除浏览器数据、换浏览器或换手机都会丢失记录，请定期备份。</p>
+      <p class="hint" style="margin-top:0">所有记录只保存在这台手机的这个浏览器里，不会上传到任何服务器。</p>
       <p id="backupInfo"></p>
       <button type="button" class="primary" id="btnCopyBackup">复制备份内容</button>
-      <span class="hint">复制后粘贴到微信"文件传输助手"或手机"便签"里发送/保存，就算备份好了。包含标志物、治疗、医嘱全部文字记录；<b>报告照片和附件不包含</b>，请保留原件（相册照片、医院给的文件）。</span>
+      <span class="hint">复制后粘贴到微信"文件传输助手"或手机"便签"里保存。</span>
       <div id="copyFallback" hidden>
         <p class="err" style="margin:10px 0 6px">浏览器不允许自动复制。请长按下面的框 → "全选" → "复制"，复制好后点"我已复制"。</p>
         <textarea id="backupText" class="mono" rows="6" readonly aria-label="备份内容"></textarea>
@@ -211,11 +206,10 @@
       <label class="field"><span class="field-label">把之前保存的备份内容粘贴到这里</span><textarea id="restoreText" class="mono" rows="4" placeholder="长按 → 粘贴"></textarea></label>
       <p class="err" id="restoreErr" role="alert" hidden></p>
       <button type="button" class="primary" id="btnRestoreText">恢复</button>
-      <span class="hint">恢复是"合并"：只添加本机没有的记录，不会覆盖或删除现有记录。</span>
     </div>
     <div class="card">
       <h2>完整备份文件（含报告）</h2>
-      <p class="hint" style="margin-top:0">把全部记录和报告文件打包成一个文件。<b>小米浏览器可能存不下来</b>：点完后请到"文件管理 → 下载"里确认有"康复记录备份_日期.json"。找不到就说明不支持，请用上面的复制备份。</p>
+      <p class="hint" style="margin-top:0">把全部记录和报告文件打包成一个文件。</p>
       <button type="button" id="btnBackup">导出完整备份文件</button>
       <label class="field" style="margin-top:12px"><span class="field-label">从备份文件恢复（.json，或旧版"共享副本" .html）</span><input type="file" id="importFile" accept=".json,.html,.htm,application/json,text/html"></label>
     </div>
@@ -226,16 +220,14 @@
     <div class="card" id="installCard">
       <h2>添加到桌面（小米浏览器）</h2>
       <ol class="steps">
-        <li>用小米浏览器打开本页网址（必须是 https 网址，不能是手机里的文件）。</li>
-        <li>点底部菜单（☰ 或"三条横线"）→ "添加到桌面"或"添加至 → 桌面"。</li>
-        <li>桌面没出现图标：设置 → 应用设置 → 应用管理 → 浏览器 → 权限 → 打开"桌面快捷方式"，再添加一次。</li>
-        <li>以后都从这个图标或同一个浏览器打开。<b>换浏览器打开，看不到这里的记录。</b></li>
+        <li>用小米浏览器打开本页网址（必须是 https 网址）。</li>
+        <li>点底部菜单（☰）→ "添加到桌面"。</li>
+        <li>桌面没出现图标：设置 → 应用设置 → 应用管理 → 浏览器 → 权限 → 打开"桌面快捷方式"。</li>
       </ol>
     </div>
     <div class="card">
       <h2>清空数据</h2>
       <button type="button" class="danger" id="btnWipe">删除本机全部记录</button>
-      <span class="hint">会要求两次确认。建议先导出备份。</span>
     </div>
   </section>
 </main>
